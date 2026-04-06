@@ -1,0 +1,3 @@
+mcp
+qdrant-client[fastembed]
+lxml
