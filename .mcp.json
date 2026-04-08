@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "magento-search": {
+      "command": "/home/mandar/work/llm/magento-llm-context/.venv/bin/python",
+      "args": ["/home/mandar/work/llm/magento-llm-context/mcp_qdrant_server.py"],
+      "cwd": "/home/mandar/work/llm/magento-llm-context"
+    }
+  }
+}

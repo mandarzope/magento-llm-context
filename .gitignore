@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.code_graph/
+.indexer_cache.json
+.indexer_summary.md
+.qdrant_db/
+*.pyc

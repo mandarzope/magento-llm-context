@@ -13,9 +13,29 @@ A Python toolkit that indexes a Magento 2 project's XML configuration, DI declar
 ## Requirements
 
 - Python 3.10+
+- Docker (for Qdrant)
 - A Magento 2 project with `app/etc/config.php` and `vendor/` present
 
 ## Installation
+
+### 1. Start Qdrant
+
+Pull and run the Qdrant Docker container:
+
+```bash
+docker pull qdrant/qdrant
+docker run -d --name qdrant -p 6333:6333 -p 6334:6334 \
+  -v qdrant_storage:/qdrant/storage \
+  qdrant/qdrant
+```
+
+Verify it's running:
+
+```bash
+curl http://localhost:6333/healthz
+```
+
+### 2. Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -72,8 +92,8 @@ Enter search (or 'exit'): catalog product save event observer
 
 The MCP server exposes two tools to LLM agents:
 
-- `search_magento(query, limit)` — semantic search over the index
-- `add_magento_note(item_id, note)` — attach a note to an indexed item
+- `search_magento(query, limit_per_category)` — searches across all categories (app code classes, app XML, vendor classes, vendor XML, modules) and returns a formatted context prompt with app/code (editable) results first
+- `search_magento_raw(query, limit, type_filter, source_filter)` — targeted search with explicit type (`class`, `method`, `reference`, `template`, `module`, `theme`) and source (`app` or `vendor`) filters
 
 ```bash
 # Start the server (uses stdio transport)
@@ -92,6 +112,40 @@ To use with Claude Code, add it to your MCP config:
     }
   }
 }
+```
+
+## CLAUDE.md Instructions
+
+Add the following to the `CLAUDE.md` file in your Magento project root so Claude Code uses the MCP search tool instead of scanning files directly:
+
+```markdown
+# Magento Code Search
+
+IMPORTANT: This project has a Magento search MCP tool connected. Always use it before reading or grepping files.
+
+## Rules
+
+- Before searching for any Magento class, method, XML config, template, event, plugin, or DI preference, call `search_magento(query)` FIRST.
+- Do NOT grep or glob through `vendor/` or large XML directories. The search tool already indexes all modules, classes, methods, XML references, and templates.
+- Do NOT read vendor files to understand class hierarchy. Use `search_magento("ClassName")` to get inheritance, interfaces, and method signatures.
+- Use `search_magento_raw(query, type_filter="method")` to find specific function/method implementations.
+- Use `search_magento_raw(query, source_filter="app")` when you only care about editable app/code files.
+- Only read a file directly AFTER the search tool gives you the exact file path and line number.
+
+## Search examples
+
+- Find where tier pricing is implemented: `search_magento("tier price calculation")`
+- Find DI preferences for an interface: `search_magento("CatalogInventory StockRegistryInterface")`
+- Find event observers: `search_magento("checkout submit observer")`
+- Find a specific method: `search_magento_raw("getPrice", type_filter="method")`
+- Find only app/code classes: `search_magento_raw("TierPrice", type_filter="class", source_filter="app")`
+- Find layout XML blocks: `search_magento("product.info.price block")`
+
+## Why
+
+- vendor/ has 10,000+ PHP files and 5,000+ XML files. Grepping is slow and wastes tokens.
+- The search tool returns only relevant results with file paths, line numbers, and context.
+- App code (editable) results are always shown before vendor (read-only) results.
 ```
 
 ## What gets indexed

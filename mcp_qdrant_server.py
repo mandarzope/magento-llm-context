@@ -1,8 +1,13 @@
 import os
 import sys
+import logging
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from qdrant_tool import MagentoSearchTool
+
+# Suppress noisy HTTP logs from qdrant-client — they go to stderr and break MCP stdio
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 # Initialize FastMCP - it handles the JSON-RPC communication automatically
 mcp = FastMCP("Magento Qdrant Search")
@@ -13,34 +18,35 @@ project_root = os.getcwd()
 search_tool = MagentoSearchTool(project_root)
 
 @mcp.tool()
-def search_magento(query: str, limit: int = 5) -> str:
+def search_magento(query: str, limit_per_category: int = 5) -> str:
     """
-    Search for Magento 2 DI declarations, XML references, and templates using vector search.
-    Useful for finding where a class is used in XML or finding template paths.
+    Search the Magento 2 project index across all categories.
+    Returns results grouped by: app code classes/methods, app code XML/templates,
+    vendor classes/methods, vendor XML/templates, and modules/themes.
+    App code (editable) results are shown first, vendor (read-only) after.
     """
-    results = search_tool.search(query, limit)
-    if not results:
-        return "No results found."
-    
-    output = []
-    for r in results:
-        p = r['payload']
-        note_str = f" | Notes: {p['notes']}" if p.get('notes') else ""
-        output.append(f"- [{r['id']}] {p['text']} (Score: {r['score']:.3f}){note_str}")
-    
-    return "\n".join(output)
+    return search_tool.search_context(query, limit_per_category)
 
 @mcp.tool()
-def add_magento_note(item_id: str, note: str) -> str:
+def search_magento_raw(query: str, limit: int = 5,
+                       type_filter: str = "", source_filter: str = "") -> str:
     """
-    Append a permanent note to a specific indexed item (reference or template).
-    Requires the UUID 'item_id' returned from search_magento.
+    Search the Magento 2 project index with explicit filters.
+    type_filter: reference, template, module, theme, class, or method.
+    source_filter: 'app' (editable app/code) or 'vendor' (read-only).
     """
-    try:
-        search_tool.add_note(item_id, note)
-        return f"Successfully added note to {item_id}"
-    except Exception as e:
-        return f"Error adding note: {str(e)}"
+    results = search_tool.search(
+        query, limit,
+        type_filter=type_filter or None,
+        source_filter=source_filter or None,
+    )
+    if not results:
+        return "No results found."
+
+    output = []
+    for r in results:
+        output.append(search_tool._format_result(r))
+    return "\n".join(output)
 
 if __name__ == "__main__":
     # Start the server using stdio transport
